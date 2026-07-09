@@ -11,6 +11,7 @@ MAX_TOKENS="$(bashio::config 'max_tokens')"
 export GROK_BASE_URL="https://api.x.ai/v1"
 export GROK_MODEL="${MODEL:-grok-code-fast-1}"
 export GROK_MAX_TOKENS="${MAX_TOKENS:-8192}"
+export GROK_MAX_STEPS="$(bashio::config 'max_tool_steps')"
 
 # Confirm before shell commands / file writes (secure default: on unless
 # the user has explicitly set require_approval to false)

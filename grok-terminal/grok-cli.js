@@ -27,6 +27,9 @@ const MAX_TOOL_OUTPUT = 24000; // chars, to keep context manageable
 // Default ON — protects against prompt-injection auto-executing something.
 const REQUIRE_APPROVAL = /^(1|true|yes|on)$/i.test(process.env.GROK_REQUIRE_APPROVAL || 'true');
 const MUTATING = new Set(['write_file', 'edit_file', 'run_shell']);
+// Max tool calls per message before we stop, to prevent runaway loops.
+const parsedSteps = parseInt(process.env.GROK_MAX_STEPS || '', 10);
+const MAX_TOOL_STEPS = Number.isFinite(parsedSteps) ? Math.max(1, parsedSteps) : 40;
 
 let rl; // readline interface (assigned in main), used for approval prompts
 
@@ -230,7 +233,7 @@ function startSpinner(label) {
 
 // ---- Agent turn: run tool loop until a final text answer ---------------------
 async function runTurn(messages) {
-  for (let step = 0; step < 25; step++) {
+  for (let step = 0; step < MAX_TOOL_STEPS; step++) {
     const stop = startSpinner('Grok is thinking…');
     let msg;
     try {
@@ -270,7 +273,8 @@ async function runTurn(messages) {
       messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
     }
   }
-  console.log(paint(c.yellow, '\n⚠  Stopped after too many tool steps.\n'));
+  console.log(paint(c.yellow, `\n⚠  Paused after ${MAX_TOOL_STEPS} tool steps to avoid a runaway loop.`));
+  console.log(paint(c.dim, "   Type 'continue' to keep going, or rephrase / split the task. Raise the limit with the max_tool_steps option.\n"));
 }
 
 // Ask the user to type input mid-turn (readline is paused during a turn).

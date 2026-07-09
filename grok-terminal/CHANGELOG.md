@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1
+
+- The per-message tool-step limit is now **40** (was 25) and configurable via the
+  new `max_tool_steps` option. When reached, the assistant pauses instead of
+  failing and tells you to type `continue` (the conversation is kept, so it
+  resumes). Guarded against an empty/invalid value disabling the loop.
+
 ## 1.3.0
 
 - **Security: confirmation prompt before shell commands and file writes.** New

@@ -28,6 +28,7 @@ Open the add-on's **Configuration** tab:
 | `grok_model`       | Which Grok model to use. Default: `grok-code-fast-1`.                    |
 | `max_tokens`       | Maximum response tokens. Default: `8192`.                               |
 | `require_approval` | Ask before running shell commands / writing files. Default: `true`.     |
+| `max_tool_steps`   | Max tool actions per message before pausing (anti-loop). Default: `40`.  |
 
 After entering your API key, click **Save** and **(re)start** the add-on.
 
