@@ -1,6 +1,6 @@
 # Grok Terminal
 
-A web-based terminal for Home Assistant with [xAI's Grok CLI](https://www.npmjs.com/package/@vibe-kit/grok-cli)
+A web-based terminal for Home Assistant with [xAI's Grok CLI](https://www.npmjs.com/package/grok-dev)
 pre-installed. Open it from the sidebar and chat with Grok to read entity
 states, edit your `configuration.yaml`, build automations, debug logs, and more —
 all with direct access to your `/config` directory.

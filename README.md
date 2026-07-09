@@ -9,7 +9,7 @@ brings **xAI's Grok** into your smart home as an AI assistant — inspired by
 
 ### 🤖 [Grok Terminal](./grok-terminal)
 
-A web-based terminal with the [Grok CLI](https://www.npmjs.com/package/@vibe-kit/grok-cli)
+A web-based terminal with the [Grok CLI](https://www.npmjs.com/package/grok-dev)
 pre-installed. Open it from the Home Assistant sidebar and let Grok read your
 entity states, edit `configuration.yaml`, build automations, and debug your
 setup — with direct access to your `/config` directory.
