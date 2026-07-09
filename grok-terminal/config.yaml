@@ -1,0 +1,31 @@
+name: Grok Terminal
+version: "1.0.0"
+slug: grok_terminal
+description: >-
+  Web-based terminal with xAI's Grok CLI pre-installed, for managing your
+  Home Assistant configuration and automations with AI.
+url: https://github.com/ulstrup90210/home-assistant-grok-addons/tree/main/grok-terminal
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+ingress: true
+ingress_port: 7681
+panel_icon: mdi:robot-happy-outline
+panel_title: Grok
+hassio_api: true
+homeassistant_api: true
+map:
+  - config:rw
+  - addon_config:rw
+  - ssl:ro
+  - share:rw
+options:
+  xai_api_key: ""
+  grok_model: grok-code-fast-1
+  max_tokens: 8192
+schema:
+  xai_api_key: password?
+  grok_model: list(grok-code-fast-1|grok-4|grok-3|grok-3-mini|grok-2)?
+  max_tokens: int(256,131072)?
