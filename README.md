@@ -9,10 +9,11 @@ brings **xAI's Grok** into your smart home as an AI assistant — inspired by
 
 ### 🤖 [Grok Terminal](./grok-terminal)
 
-A web-based terminal with the [Grok CLI](https://www.npmjs.com/package/grok-dev)
-pre-installed. Open it from the Home Assistant sidebar and let Grok read your
-entity states, edit `configuration.yaml`, build automations, and debug your
-setup — with direct access to your `/config` directory.
+A web-based terminal with a built-in **Grok assistant** (a small, dependency-free
+Node.js client for xAI's API). Open it from the Home Assistant sidebar and let
+Grok read your entity states, edit `configuration.yaml`, build automations, and
+debug your setup — with direct access to your `/config` directory. Because it is
+pure Node.js, it runs on any CPU (no Bun/AVX requirement).
 
 ## Installation
 
@@ -37,8 +38,9 @@ setup — with direct access to your `/config` directory.
 └── grok-terminal/           # The add-on
     ├── config.yaml          # Add-on manifest (options, ingress, mappings)
     ├── build.yaml           # Base images per architecture
-    ├── Dockerfile           # Installs Node.js, ttyd and the Grok CLI
-    ├── run.sh               # Entrypoint: launches ttyd + grok
+    ├── Dockerfile           # Installs Node.js + ttyd
+    ├── grok-cli.js          # The built-in Grok assistant (pure Node.js)
+    ├── run.sh               # Entrypoint: launches ttyd + the assistant
     ├── DOCS.md              # In-app documentation
     └── CHANGELOG.md
 ```

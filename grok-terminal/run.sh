@@ -24,9 +24,9 @@ if bashio::config.is_empty 'xai_api_key'; then
     START_CMD='printf "\n\033[33m⚠  No xAI API key configured.\033[0m\nAdd it in the add-on Configuration tab (https://console.x.ai) and restart.\n\n"; exec bash'
 else
     export GROK_API_KEY="$(bashio::config 'xai_api_key')"
-    bashio::log.info "Starting Grok CLI (model: ${GROK_MODEL})..."
-    # Fall back to a shell if the CLI exits, so the terminal stays usable.
-    START_CMD='grok; exec bash'
+    bashio::log.info "Starting Grok assistant (model: ${GROK_MODEL})..."
+    # Fall back to a shell if the assistant exits, so the terminal stays usable.
+    START_CMD='node /opt/grok-cli.js; exec bash'
 fi
 
 # --- Serve the web terminal ---------------------------------------------------

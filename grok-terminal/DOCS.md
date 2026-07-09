@@ -1,9 +1,15 @@
 # Grok Terminal
 
-A web-based terminal for Home Assistant with [xAI's Grok CLI](https://www.npmjs.com/package/grok-dev)
-pre-installed. Open it from the sidebar and chat with Grok to read entity
-states, edit your `configuration.yaml`, build automations, debug logs, and more —
-all with direct access to your `/config` directory.
+A web-based terminal for Home Assistant with a built-in **Grok assistant** (a
+small, dependency-free Node.js client for xAI's API). Open it from the sidebar
+and chat with Grok to read entity states, edit your `configuration.yaml`, build
+automations, debug logs, and more — all with direct access to your `/config`
+directory.
+
+> Why a built-in client instead of an off-the-shelf Grok CLI? The popular
+> community CLIs either call xAI's removed "Live Search" API (which now returns
+> a 410 error) or require the Bun runtime, which crashes on CPUs without AVX.
+> This assistant is pure Node.js, so it runs on any hardware.
 
 ## Installation
 
@@ -35,12 +41,13 @@ After entering your API key, click **Save** and **(re)start** the add-on.
 ## Usage
 
 1. Start the add-on and click **Open Web UI** (or the **Grok** item in the sidebar).
-2. The Grok CLI launches automatically in your `/config` folder.
+2. The Grok assistant launches automatically in your `/config` folder.
 3. Ask it things like:
    - `Add a template sensor that shows the average of my three temperature sensors`
    - `Why is my Zigbee automation not triggering? Check the logs.`
    - `Create a new automation that turns off all lights at midnight`
-4. Type `exit` to drop to a normal shell; restart the add-on to relaunch Grok.
+4. Built-in commands: `/reset` (new conversation), `/help`, `/exit`. After
+   exiting you land in a normal shell; restart the add-on to relaunch Grok.
 
 ## Home Assistant API access
 
@@ -64,5 +71,5 @@ curl -s -H "Authorization: Bearer $HASS_TOKEN" $HASS_URL/api/states | jq '.[].en
 - **"No xAI API key configured"** — set `xai_api_key` and restart.
 - **401 / auth errors** — the key is wrong or has no credits; check
   <https://console.x.ai>.
-- **`grok` exits immediately** — the terminal falls back to a normal shell; run
-  `grok` manually to see the error message.
+- **Assistant exits to a shell** — an error occurred; re-run it manually with
+  `node /opt/grok-cli.js` to see the message.

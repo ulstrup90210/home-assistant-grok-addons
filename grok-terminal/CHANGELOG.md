@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+- **Replaced the third-party Grok CLI with a built-in, dependency-free Node.js
+  assistant.** The previous engines either called xAI's removed Live Search API
+  (410 error) or required the Bun runtime, which crashes on CPUs without AVX
+  (`Illegal instruction`). The new assistant is pure Node.js and runs on any
+  CPU, using xAI's current OpenAI-compatible API with function calling.
+- The assistant can read, write and edit files, list directories, and run shell
+  commands in `/config`, and can reach the HA API via `HASS_URL`/`HASS_TOKEN`.
+- Back to the lightweight Alpine base image; `armv7` support restored.
+
 ## 1.1.1
 
 - Install the **Bun** runtime in the image. The `grok-dev` CLI's entrypoint uses
