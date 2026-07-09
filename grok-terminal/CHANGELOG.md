@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Install the **Bun** runtime in the image. The `grok-dev` CLI's entrypoint uses
+  a `#!/usr/bin/env bun` shebang, so it failed at runtime with
+  `/usr/bin/env: 'bun': No such file or directory` when only Node was present.
+
 ## 1.1.0
 
 - **Fix "410 Live search is deprecated" error.** Switched the AI engine from the

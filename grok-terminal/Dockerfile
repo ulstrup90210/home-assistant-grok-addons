@@ -36,6 +36,11 @@ RUN set -eux; \
     chmod +x /usr/bin/ttyd; \
     ttyd --version
 
+# Bun runtime: the grok-dev CLI's shebang is `#!/usr/bin/env bun`, so Bun
+# must be present at runtime (Node alone is not enough).
+RUN npm install -g bun \
+    && bun --version
+
 # xAI Grok CLI. NOTE: use the maintained "grok-dev" package (provides `grok`).
 # The older "@vibe-kit/grok-cli" still calls xAI's deprecated Live Search API
 # and now fails with "410 Live search is deprecated".
