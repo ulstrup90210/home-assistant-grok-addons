@@ -24,9 +24,10 @@ Open the add-on's **Configuration** tab:
 
 | Option          | Description                                                                 |
 | --------------- | --------------------------------------------------------------------------- |
-| `xai_api_key`   | Your xAI API key. Get one at <https://console.x.ai>. **Required.**          |
-| `grok_model`    | Which Grok model to use. Default: `grok-code-fast-1`.                        |
-| `max_tokens`    | Maximum response tokens. Default: `8192`.                                    |
+| `xai_api_key`      | Your xAI API key. Get one at <https://console.x.ai>. **Required.**       |
+| `grok_model`       | Which Grok model to use. Default: `grok-code-fast-1`.                    |
+| `max_tokens`       | Maximum response tokens. Default: `8192`.                               |
+| `require_approval` | Ask before running shell commands / writing files. Default: `true`.     |
 
 After entering your API key, click **Save** and **(re)start** the add-on.
 
@@ -61,8 +62,14 @@ curl -s -H "Authorization: Bearer $HASS_TOKEN" $HASS_URL/api/states | jq '.[].en
 ## Security notes
 
 - Your API key is stored in the add-on options and used only to call `api.x.ai`.
-- Grok can read and modify everything in `/config`. Review changes before
-  restarting Home Assistant, and keep backups/snapshots.
+- Grok can read and modify everything in `/config` and run shell commands. Keep
+  `require_approval` on so nothing runs without your `y` confirmation — this is
+  the main guard against a *prompt-injection* payload (e.g. hidden instructions
+  in a file the assistant reads) making it run something you didn't intend.
+- The assistant (and the shell) can read secrets such as `secrets.yaml` and the
+  add-on's own `/data/options.json` (which holds your API key). Don't paste or
+  screen-share terminal output without checking it first.
+- Review changes before restarting Home Assistant, and keep backups/snapshots.
 - The terminal is protected by Home Assistant's authentication (ingress). Do not
   expose it publicly without additional protection.
 

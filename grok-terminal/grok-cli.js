@@ -23,6 +23,12 @@ const MODEL = process.env.GROK_MODEL || 'grok-code-fast-1';
 const MAX_TOKENS = parseInt(process.env.GROK_MAX_TOKENS || '8192', 10);
 const WORKDIR = process.env.GROK_WORKDIR || '/config';
 const MAX_TOOL_OUTPUT = 24000; // chars, to keep context manageable
+// Ask for confirmation before running shell commands or writing files.
+// Default ON — protects against prompt-injection auto-executing something.
+const REQUIRE_APPROVAL = /^(1|true|yes|on)$/i.test(process.env.GROK_REQUIRE_APPROVAL || 'true');
+const MUTATING = new Set(['write_file', 'edit_file', 'run_shell']);
+
+let rl; // readline interface (assigned in main), used for approval prompts
 
 // ---- Tiny ANSI helpers -------------------------------------------------------
 const c = {
@@ -203,6 +209,9 @@ async function callModel(messages) {
     throw new Error(`API ${res.status}: ${body}`);
   }
   const data = await res.json();
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error(`Unexpected API response: ${JSON.stringify(data).slice(0, 500)}`);
+  }
   return data.choices[0].message;
 }
 
@@ -243,15 +252,45 @@ async function runTurn(messages) {
     if (calls.length === 0) return; // final answer reached
 
     for (const call of calls) {
+      const name = call.function.name;
       let args = {};
       try { args = JSON.parse(call.function.arguments || '{}'); } catch (_) {}
-      const label = describeCall(call.function.name, args);
-      console.log(paint(c.grey, `  ↳ ${label}`));
-      const result = await execTool(call.function.name, args);
+      console.log(paint(c.grey, `  ↳ ${describeCall(name, args)}`));
+
+      if (REQUIRE_APPROVAL && MUTATING.has(name)) {
+        const ok = await confirmAction(name, args);
+        if (!ok) {
+          console.log(paint(c.yellow, '     ✗ declined'));
+          messages.push({ role: 'tool', tool_call_id: call.id, content: 'The user declined to run this action.' });
+          continue;
+        }
+      }
+
+      const result = await execTool(name, args);
       messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
     }
   }
   console.log(paint(c.yellow, '\n⚠  Stopped after too many tool steps.\n'));
+}
+
+// Ask the user to type input mid-turn (readline is paused during a turn).
+function ask(question) {
+  return new Promise((resolve) => {
+    rl.resume();
+    rl.question(question, (answer) => { rl.pause(); resolve(answer); });
+  });
+}
+
+async function confirmAction(name, args) {
+  if (name === 'run_shell') {
+    console.log(paint(c.dim, '     $ ' + String(args.command || '').replace(/\n/g, '\n     ')));
+  } else if (name === 'write_file') {
+    console.log(paint(c.dim, `     → ${args.path}  (${Buffer.byteLength(args.content || '')} bytes)`));
+  } else if (name === 'edit_file') {
+    console.log(paint(c.dim, `     → ${args.path}`));
+  }
+  const ans = (await ask(paint(c.yellow, '     Proceed? [y/N] '))).trim().toLowerCase();
+  return ans === 'y' || ans === 'yes';
 }
 
 function describeCall(name, args) {
@@ -269,6 +308,7 @@ function describeCall(name, args) {
 function banner() {
   console.log(paint(c.teal + c.bold, '\n  Grok Terminal') + paint(c.dim, `  ·  model: ${MODEL}`));
   console.log(paint(c.dim, `  Working in ${WORKDIR}. I can read, edit and run things here.`));
+  console.log(paint(c.dim, `  Writes & shell commands ${REQUIRE_APPROVAL ? 'ask for confirmation' : 'run automatically'}.`));
   console.log(paint(c.dim, '  Type your request. Commands: /reset  /help  /exit\n'));
 }
 
@@ -297,7 +337,7 @@ async function main() {
   banner();
 
   let messages = [{ role: 'system', content: SYSTEM_PROMPT }];
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const prompt = () => rl.setPrompt(paint(c.green + c.bold, 'you ') + paint(c.green, '› '));
 
   prompt();
@@ -318,7 +358,11 @@ async function main() {
 
     messages.push({ role: 'user', content: text });
     rl.pause();
-    await runTurn(messages);
+    try {
+      await runTurn(messages);
+    } catch (e) {
+      console.log(paint(c.red, `\n⚠  ${e.message}\n`));
+    }
     rl.resume();
     rl.prompt();
   });

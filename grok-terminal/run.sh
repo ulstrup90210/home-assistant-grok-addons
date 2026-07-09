@@ -12,6 +12,14 @@ export GROK_BASE_URL="https://api.x.ai/v1"
 export GROK_MODEL="${MODEL:-grok-code-fast-1}"
 export GROK_MAX_TOKENS="${MAX_TOKENS:-8192}"
 
+# Confirm before shell commands / file writes (secure default: on unless
+# the user has explicitly set require_approval to false)
+if bashio::config.false 'require_approval'; then
+    export GROK_REQUIRE_APPROVAL="false"
+else
+    export GROK_REQUIRE_APPROVAL="true"
+fi
+
 # Give the CLI access to Home Assistant's API through the Supervisor proxy,
 # so you can ask Grok to read entity states or call services.
 export HASS_URL="http://supervisor/core"

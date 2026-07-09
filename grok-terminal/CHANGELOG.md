@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0
+
+- **Security: confirmation prompt before shell commands and file writes.** New
+  `require_approval` option (default **on**) makes the assistant ask `Proceed?
+  [y/N]` before `run_shell`, `write_file` or `edit_file`. This limits the damage
+  a prompt-injection payload (e.g. hidden in a file the assistant reads) could
+  do. Set it to `false` for a smoother, fully autonomous flow.
+- **Least privilege:** removed the `hassio_api` permission (the add-on only
+  needs `homeassistant_api` for the Core API).
+- Hardened the client: guard against malformed API responses and catch errors
+  in the input loop so the assistant never dies unexpectedly.
+- Added a `LICENSE` file (MIT).
+
 ## 1.2.0
 
 - **Replaced the third-party Grok CLI with a built-in, dependency-free Node.js

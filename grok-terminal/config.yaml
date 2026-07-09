@@ -1,5 +1,5 @@
 name: Grok Terminal
-version: "1.2.0"
+version: "1.3.0"
 slug: grok_terminal
 description: >-
   Web-based terminal with an xAI Grok assistant, for managing your
@@ -14,7 +14,6 @@ ingress: true
 ingress_port: 7681
 panel_icon: mdi:robot-happy-outline
 panel_title: Grok
-hassio_api: true
 homeassistant_api: true
 map:
   - config:rw
@@ -25,7 +24,9 @@ options:
   xai_api_key: ""
   grok_model: grok-code-fast-1
   max_tokens: 8192
+  require_approval: true
 schema:
   xai_api_key: password?
   grok_model: list(grok-code-fast-1|grok-4|grok-3|grok-3-mini|grok-2)?
   max_tokens: int(256,131072)?
+  require_approval: bool?
