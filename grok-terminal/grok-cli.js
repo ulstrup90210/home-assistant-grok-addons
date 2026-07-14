@@ -33,6 +33,16 @@ const MAX_TOOL_STEPS = Number.isFinite(parsedSteps) ? Math.max(1, parsedSteps) :
 
 let rl; // readline interface (assigned in main), used for approval prompts
 
+// ---- Interrupt / input state -------------------------------------------------
+// Ctrl+C should never drop the user to a bare shell. These track whether a turn
+// is running (so Ctrl+C interrupts it), an in-flight model call to abort, and a
+// pending y/N approval answer routed through the single 'line' handler.
+let turnActive = false;
+let interrupted = false;
+let aborter = null;         // AbortController for the current model call
+let pendingApproval = null; // resolver awaiting a line of input mid-turn
+let lastSigintAt = 0;       // for double-Ctrl+C-to-exit on an empty prompt
+
 // ---- Tiny ANSI helpers -------------------------------------------------------
 const c = {
   reset: '\x1b[0m', dim: '\x1b[2m', bold: '\x1b[1m',
@@ -191,7 +201,7 @@ async function execTool(name, args) {
 }
 
 // ---- xAI API call ------------------------------------------------------------
-async function callModel(messages) {
+async function callModel(messages, signal) {
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -206,6 +216,7 @@ async function callModel(messages) {
       max_tokens: MAX_TOKENS,
       temperature: 0.2,
     }),
+    signal,
   });
   if (!res.ok) {
     const body = await res.text();
@@ -233,55 +244,76 @@ function startSpinner(label) {
 
 // ---- Agent turn: run tool loop until a final text answer ---------------------
 async function runTurn(messages) {
-  for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-    const stop = startSpinner('Grok is thinking…');
-    let msg;
-    try {
-      msg = await callModel(messages);
-    } catch (e) {
-      stop();
-      console.log(paint(c.red, `\n⚠  ${e.message}\n`));
-      return;
-    }
-    stop();
-
-    messages.push(msg);
-
-    if (msg.content && msg.content.trim()) {
-      console.log('\n' + paint(c.bold + c.teal, 'Grok') + '  ' + msg.content.trim() + '\n');
-    }
-
-    const calls = msg.tool_calls || [];
-    if (calls.length === 0) return; // final answer reached
-
-    for (const call of calls) {
-      const name = call.function.name;
-      let args = {};
-      try { args = JSON.parse(call.function.arguments || '{}'); } catch (_) {}
-      console.log(paint(c.grey, `  ↳ ${describeCall(name, args)}`));
-
-      if (REQUIRE_APPROVAL && MUTATING.has(name)) {
-        const ok = await confirmAction(name, args);
-        if (!ok) {
-          console.log(paint(c.yellow, '     ✗ declined'));
-          messages.push({ role: 'tool', tool_call_id: call.id, content: 'The user declined to run this action.' });
-          continue;
+  turnActive = true;
+  interrupted = false;
+  try {
+    for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+      if (interrupted) return;
+      aborter = new AbortController();
+      const stop = startSpinner('Grok is thinking…');
+      let msg;
+      try {
+        msg = await callModel(messages, aborter.signal);
+      } catch (e) {
+        stop();
+        if (interrupted || e.name === 'AbortError') {
+          console.log(paint(c.yellow, '\n  ⏹  Interrupted — back to the prompt.\n'));
+          return;
         }
+        console.log(paint(c.red, `\n⚠  ${e.message}\n`));
+        return;
+      } finally {
+        aborter = null;
+      }
+      stop();
+
+      messages.push(msg);
+
+      if (msg.content && msg.content.trim()) {
+        console.log('\n' + paint(c.bold + c.teal, 'Grok') + '  ' + msg.content.trim() + '\n');
       }
 
-      const result = await execTool(name, args);
-      messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
+      const calls = msg.tool_calls || [];
+      if (calls.length === 0) return; // final answer reached
+
+      for (const call of calls) {
+        if (interrupted) {
+          console.log(paint(c.yellow, '\n  ⏹  Interrupted — back to the prompt.\n'));
+          return;
+        }
+        const name = call.function.name;
+        let args = {};
+        try { args = JSON.parse(call.function.arguments || '{}'); } catch (_) {}
+        console.log(paint(c.grey, `  ↳ ${describeCall(name, args)}`));
+
+        if (REQUIRE_APPROVAL && MUTATING.has(name)) {
+          const ok = await confirmAction(name, args);
+          if (!ok) {
+            console.log(paint(c.yellow, '     ✗ declined'));
+            messages.push({ role: 'tool', tool_call_id: call.id, content: 'The user declined to run this action.' });
+            continue;
+          }
+        }
+
+        const result = await execTool(name, args);
+        messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
+      }
     }
+    console.log(paint(c.yellow, `\n⚠  Paused after ${MAX_TOOL_STEPS} tool steps to avoid a runaway loop.`));
+    console.log(paint(c.dim, "   Type 'continue' to keep going, or rephrase / split the task. Raise the limit with the max_tool_steps option.\n"));
+  } finally {
+    turnActive = false;
+    aborter = null;
   }
-  console.log(paint(c.yellow, `\n⚠  Paused after ${MAX_TOOL_STEPS} tool steps to avoid a runaway loop.`));
-  console.log(paint(c.dim, "   Type 'continue' to keep going, or rephrase / split the task. Raise the limit with the max_tool_steps option.\n"));
 }
 
-// Ask the user to type input mid-turn (readline is paused during a turn).
+// Ask the user to type input mid-turn. readline stays active throughout the
+// turn (so Ctrl+C keeps working); the next line is routed here via the shared
+// 'line' handler through pendingApproval.
 function ask(question) {
   return new Promise((resolve) => {
-    rl.resume();
-    rl.question(question, (answer) => { rl.pause(); resolve(answer); });
+    process.stdout.write(question);
+    pendingApproval = resolve;
   });
 }
 
@@ -348,6 +380,16 @@ async function main() {
   rl.prompt();
 
   rl.on('line', async (line) => {
+    // Mid-turn: feed a pending y/N approval answer, and ignore any other input
+    // while Grok is working (you can't start a second turn on top of one).
+    if (pendingApproval) {
+      const resolve = pendingApproval;
+      pendingApproval = null;
+      resolve(line);
+      return;
+    }
+    if (turnActive) return;
+
     const text = line.trim();
     if (!text) { rl.prompt(); return; }
 
@@ -361,13 +403,35 @@ async function main() {
     }
 
     messages.push({ role: 'user', content: text });
-    rl.pause();
     try {
       await runTurn(messages);
     } catch (e) {
       console.log(paint(c.red, `\n⚠  ${e.message}\n`));
     }
-    rl.resume();
+    rl.prompt();
+  });
+
+  // Ctrl+C: never fall through to a bare shell. Interrupt a running turn,
+  // clear a half-typed line, or (on an empty prompt) require a second press.
+  rl.on('SIGINT', () => {
+    if (turnActive) {
+      interrupted = true;
+      if (aborter) aborter.abort();
+      if (pendingApproval) { const r = pendingApproval; pendingApproval = null; r('n'); }
+      return;
+    }
+    if (rl.line && rl.line.length > 0) {
+      rl.line = '';
+      rl.cursor = 0;
+      process.stdout.write('\r\x1b[2K');
+      rl.prompt();
+      return;
+    }
+    const now = Date.now();
+    if (now - lastSigintAt < 2000) { rl.close(); return; }
+    lastSigintAt = now;
+    process.stdout.write('\r\x1b[2K');
+    console.log(paint(c.dim, '  (Ctrl+C again to exit, or type /exit)'));
     rl.prompt();
   });
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.3
+
+- **Ctrl+C no longer drops you into a bare shell.** Without a SIGINT handler,
+  Node's readline closed the assistant on Ctrl+C, so the terminal fell through
+  to the container's `bash`. Now Ctrl+C:
+  - **while Grok is working** — interrupts the current model call and returns to
+    the prompt (the conversation is kept);
+  - **with text typed** — clears the current line;
+  - **on an empty prompt** — asks for a second press (or `/exit`) to quit.
+
 ## 1.3.2
 
 - **Fix: Grok could not see the Home Assistant configuration.** The add-on mapped
