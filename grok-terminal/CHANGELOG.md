@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.0
+
+- **Long-term memory across sessions.** Grok now keeps a small Markdown memory
+  file at `/config/grok-memory.md`. Its contents are loaded into the system
+  prompt at the start of every session, so earlier facts and decisions are
+  remembered. A new `remember` tool lets you say things like *"remember that my
+  living-room lights are light.stue"* and Grok saves a one-line note (no
+  approval prompt — it only ever appends to that one file). You can also open and
+  edit the file yourself. To keep token use low, entries are meant to be terse
+  and the loaded memory is capped (default 4000 chars, most-recent kept; override
+  with `GROK_MEMORY_MAX_CHARS`). `/reset` clears the conversation but keeps memory.
+
 ## 1.3.3
 
 - **Ctrl+C no longer drops you into a bare shell.** Without a SIGINT handler,

@@ -51,6 +51,23 @@ After entering your API key, click **Save** and **(re)start** the add-on.
 4. Built-in commands: `/reset` (new conversation), `/help`, `/exit`. After
    exiting you land in a normal shell; restart the add-on to relaunch Grok.
 
+## Memory (remembered across sessions)
+
+Grok keeps a small long-term memory in `/config/grok-memory.md`. At the start of
+every session this file is loaded into Grok's context, so facts and decisions
+from earlier chats are remembered.
+
+- **Ask Grok to remember something:** just say e.g. *"remember that my
+  living-room lights are `light.stue`"* or *"husk at varmepumpen hedder
+  climate.stue"*. Grok saves a one-line note (no approval prompt — it only
+  appends to this one file).
+- **Edit it yourself:** open `/config/grok-memory.md` in the File editor add-on
+  (or ask Grok to) and add/remove lines. One short fact per line.
+- **Keep it lean:** entries are meant to be terse so they cost almost no tokens.
+  Only the most recent ~4000 characters are loaded (override with the
+  `GROK_MEMORY_MAX_CHARS` env var); trim the file if it grows large.
+- `/reset` starts a fresh conversation but **keeps** the saved memory.
+
 ## Home Assistant API access
 
 The add-on exports `HASS_URL` and `HASS_TOKEN` (via the Supervisor proxy) into

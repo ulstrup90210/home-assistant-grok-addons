@@ -23,6 +23,11 @@ const MODEL = process.env.GROK_MODEL || 'grok-code-fast-1';
 const MAX_TOKENS = parseInt(process.env.GROK_MAX_TOKENS || '8192', 10);
 const WORKDIR = process.env.GROK_WORKDIR || '/config';
 const MAX_TOOL_OUTPUT = 24000; // chars, to keep context manageable
+// Persistent, cross-session memory: a small Markdown file loaded into the
+// system prompt at startup and appended to via the `remember` tool. Capped so
+// it never costs many tokens.
+const MEMORY_FILE = process.env.GROK_MEMORY_FILE || path.join(WORKDIR, 'grok-memory.md');
+const MEMORY_MAX_CHARS = parseInt(process.env.GROK_MEMORY_MAX_CHARS || '4000', 10);
 // Ask for confirmation before running shell commands or writing files.
 // Default ON — protects against prompt-injection auto-executing something.
 const REQUIRE_APPROVAL = /^(1|true|yes|on)$/i.test(process.env.GROK_REQUIRE_APPROVAL || 'true');
@@ -63,7 +68,12 @@ Guidelines:
 - After changing configuration, remind the user to check the config (e.g. via "ha core check" if the 'ha' CLI is available) and reload/restart the relevant part.
 - The environment variables HASS_URL and HASS_TOKEN are available to shell commands, so you can query the live API, e.g.:
     curl -s -H "Authorization: Bearer $HASS_TOKEN" $HASS_URL/api/states
-- Be concise. Explain what you changed and why. Ask before doing anything destructive or irreversible.`;
+- Be concise. Explain what you changed and why. Ask before doing anything destructive or irreversible.
+
+Memory (persists across sessions):
+- You have a long-term memory file at ${MEMORY_FILE}. Its current contents are given to you at the start of each session, so use them as context about the user, their setup and past decisions.
+- When the user asks you to remember something (e.g. "husk at...", "remember that..."), call the \`remember\` tool with a single short line. Also proactively save durable facts worth keeping (device names, preferences, recurring quirks, decisions) — but only lasting facts, not one-off chit-chat.
+- Keep each memory entry to one terse line so it stays cheap. Don't duplicate something already in memory; if a fact changed, edit the file instead of adding a contradicting line.`;
 
 // ---- Tool definitions (OpenAI-compatible) -----------------------------------
 const tools = [
@@ -134,6 +144,18 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'remember',
+      description: 'Save one short fact to long-term memory so it is available in future sessions. Use when the user says to remember something, or for durable facts worth keeping. Keep it to a single terse line.',
+      parameters: {
+        type: 'object',
+        properties: { text: { type: 'string', description: 'The single-line fact to remember' } },
+        required: ['text'],
+      },
+    },
+  },
 ];
 
 // ---- Tool implementations ----------------------------------------------------
@@ -147,6 +169,37 @@ function clip(s) {
     return s.slice(0, MAX_TOOL_OUTPUT) + `\n… [truncated ${s.length - MAX_TOOL_OUTPUT} chars]`;
   }
   return s;
+}
+
+// Read the memory file (if any), trimmed to the most recent MEMORY_MAX_CHARS
+// so it never bloats the prompt. Returns '' when there is nothing saved yet.
+function loadMemory() {
+  try {
+    let txt = fs.readFileSync(MEMORY_FILE, 'utf8').trim();
+    if (!txt) return '';
+    if (txt.length > MEMORY_MAX_CHARS) {
+      txt = '…[older notes trimmed]\n' + txt.slice(txt.length - MEMORY_MAX_CHARS);
+    }
+    return txt;
+  } catch (_) {
+    return '';
+  }
+}
+
+// Append a single dated line to the memory file (creating it with a header the
+// first time). Kept out of the approval-gated MUTATING set: it only ever
+// appends one line to this one file, so it's safe and frictionless.
+function remember(text) {
+  const line = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!line) return 'ERROR: nothing to remember (empty text).';
+  let prefix = '';
+  try {
+    fs.accessSync(MEMORY_FILE);
+  } catch (_) {
+    prefix = '# Grok memory\n\nShort facts to remember across sessions. Keep entries to one line.\n\n';
+  }
+  fs.appendFileSync(MEMORY_FILE, `${prefix}- ${new Date().toISOString().slice(0, 10)} ${line}\n`, 'utf8');
+  return `Saved to memory: ${line}`;
 }
 
 function runShell(command) {
@@ -192,6 +245,8 @@ async function execTool(name, args) {
       }
       case 'run_shell':
         return await runShell(args.command);
+      case 'remember':
+        return remember(args.text);
       default:
         return `ERROR: unknown tool ${name}`;
     }
@@ -336,6 +391,7 @@ function describeCall(name, args) {
     case 'edit_file': return `edit ${args.path}`;
     case 'list_dir': return `list ${args.path || WORKDIR}`;
     case 'run_shell': return `run: ${String(args.command || '').split('\n')[0]}`;
+    case 'remember': return `remember: ${args.text}`;
     default: return `${name}(${JSON.stringify(args)})`;
   }
 }
@@ -345,6 +401,10 @@ function banner() {
   console.log(paint(c.teal + c.bold, '\n  Grok Terminal') + paint(c.dim, `  ·  model: ${MODEL}`));
   console.log(paint(c.dim, `  Working in ${WORKDIR}. I can read, edit and run things here.`));
   console.log(paint(c.dim, `  Writes & shell commands ${REQUIRE_APPROVAL ? 'ask for confirmation' : 'run automatically'}.`));
+  const memChars = loadMemory().length;
+  console.log(paint(c.dim, memChars
+    ? `  Memory: loaded ${memChars} chars from ${MEMORY_FILE}. Say "remember ..." to add.`
+    : `  Memory: empty. Say "remember ..." and I'll save it to ${MEMORY_FILE}.`));
   console.log(paint(c.dim, '  Type your request. Commands: /reset  /help  /exit\n'));
 }
 
@@ -355,12 +415,27 @@ function help() {
     '   • "Add a template sensor averaging my three temperature sensors"',
     '   • "Why is my sunset automation not firing? Check the logs."',
     '   • "Create an automation that turns off all lights at midnight"',
+    '   • "Remember that my living-room lights are called light.stue"',
+    '',
+    `  Memory is stored in ${MEMORY_FILE} (loaded each session). Ask me to`,
+    '  "remember ..." to add a note, or edit that file directly.',
     '',
     '  /reset  start a fresh conversation',
     '  /help   show this help',
     '  /exit   quit (or Ctrl+D)',
     '',
   ].join('\n')));
+}
+
+// Build the starting message list: the system prompt, plus any saved memory as
+// a second system message so it's carried into every session.
+function initialMessages() {
+  const msgs = [{ role: 'system', content: SYSTEM_PROMPT }];
+  const mem = loadMemory();
+  if (mem) {
+    msgs.push({ role: 'system', content: `Your saved memory from earlier sessions (file: ${MEMORY_FILE}):\n\n${mem}` });
+  }
+  return msgs;
 }
 
 async function main() {
@@ -372,7 +447,7 @@ async function main() {
 
   banner();
 
-  let messages = [{ role: 'system', content: SYSTEM_PROMPT }];
+  let messages = initialMessages();
   rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const prompt = () => rl.setPrompt(paint(c.green + c.bold, 'you ') + paint(c.green, '› '));
 
@@ -396,8 +471,8 @@ async function main() {
     if (text === '/exit' || text === '/quit') { rl.close(); return; }
     if (text === '/help') { help(); rl.prompt(); return; }
     if (text === '/reset') {
-      messages = [{ role: 'system', content: SYSTEM_PROMPT }];
-      console.log(paint(c.dim, '  (conversation reset)\n'));
+      messages = initialMessages();
+      console.log(paint(c.dim, '  (conversation reset; saved memory kept)\n'));
       rl.prompt();
       return;
     }
