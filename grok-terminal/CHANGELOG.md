@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.2
+
+- **Fix: Grok could not see the Home Assistant configuration.** The add-on mapped
+  both `config` and `addon_config`, which collide on `/config`. Home Assistant
+  resolves this by giving `/config` to the add-on's own (empty) private folder and
+  moving the real HA configuration to `/homeassistant` — so Grok started in an
+  empty directory and couldn't see `configuration.yaml`, automations, etc.
+  Removed the `addon_config` mapping so `/config` is again the Home Assistant
+  configuration folder, matching where the assistant works.
+
 ## 1.3.1
 
 - The per-message tool-step limit is now **40** (was 25) and configurable via the
